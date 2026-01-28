@@ -13,7 +13,7 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-// === Shaders ===
+// --- Shaders ---
 const vsSource = `
 attribute vec3 aPosition;
 attribute vec3 aColor;
@@ -55,12 +55,9 @@ if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
 }
 gl.useProgram(program);
 
-// === Geometry ===
-// Cube (taxi) and ground in one VBO for simplicity
-
-// Taxi cube (centered at origin, size 1)
-const taxiSize = 0.5;
-const t = taxiSize;
+// --- Geometry ---
+// Taxi cube
+const t = 0.5;
 const cubeVertices = [
     // x, y, z,      r, g, b
     // Front
@@ -75,7 +72,7 @@ const cubeVertices = [
     -t,  t, -t,   1, 1, 0,
 ];
 
-// Ground plane (big square)
+// Ground plane
 const g = 20;
 const groundVertices = [
     -g, 0, -g,   0.1, 0.6, 0.1,
@@ -90,16 +87,15 @@ const vertices = new Float32Array([
 ]);
 
 const indices = new Uint16Array([
-    // Cube indices (0–7)
-    0,1,2,  0,2,3,      // front
-    4,5,6,  4,6,7,      // back
-    3,2,6,  3,6,7,      // top
-    0,1,5,  0,5,4,      // bottom
-    0,3,7,  0,7,4,      // left
-    1,2,6,  1,6,5,      // right
-
-    // Ground indices (8–11)
-    8, 9,10,
+    // Cube (0–7)
+    0,1,2,  0,2,3,
+    4,5,6,  4,6,7,
+    3,2,6,  3,6,7,
+    0,1,5,  0,5,4,
+    0,3,7,  0,7,4,
+    1,2,6,  1,6,5,
+    // Ground (8–11)
+    8,9,10,
     8,10,11
 ]);
 
@@ -123,43 +119,26 @@ gl.vertexAttribPointer(aColor, 3, gl.FLOAT, false, stride, 3 * 4);
 
 const uMVP = gl.getUniformLocation(program, "uMVP");
 
-// === Matrices ===
+// --- Matrix helpers ---
 function perspective(out, fovy, aspect, near, far) {
     const f = 1.0 / Math.tan(fovy / 2);
     const nf = 1 / (near - far);
-    out[0] = f / aspect;
-    out[1] = 0;
-    out[2] = 0;
-    out[3] = 0;
-
-    out[4] = 0;
-    out[5] = f;
-    out[6] = 0;
-    out[7] = 0;
-
-    out[8] = 0;
-    out[9] = 0;
-    out[10] = (far + near) * nf;
-    out[11] = -1;
-
-    out[12] = 0;
-    out[13] = 0;
-    out[14] = (2 * far * near) * nf;
-    out[15] = 0;
+    out[0] = f / aspect; out[1] = 0; out[2] = 0; out[3] = 0;
+    out[4] = 0; out[5] = f; out[6] = 0; out[7] = 0;
+    out[8] = 0; out[9] = 0; out[10] = (far + near) * nf; out[11] = -1;
+    out[12] = 0; out[13] = 0; out[14] = (2 * far * near) * nf; out[15] = 0;
 }
 
 function lookAt(out, eye, center, up) {
-    const ex = eye[0], ey = eye[1], ez = eye[2];
-    const cx = center[0], cy = center[1], cz = center[2];
-    const ux = up[0], uy = up[1], uz = up[2];
-
-    let zx = ex - cx, zy = ey - cy, zz = ez - cz;
+    let zx = eye[0] - center[0];
+    let zy = eye[1] - center[1];
+    let zz = eye[2] - center[2];
     let len = Math.hypot(zx, zy, zz);
     zx /= len; zy /= len; zz /= len;
 
-    let xx = uy * zz - uz * zy;
-    let xy = uz * zx - ux * zz;
-    let xz = ux * zy - uy * zx;
+    let xx = up[1] * zz - up[2] * zy;
+    let xy = up[2] * zx - up[0] * zz;
+    let xz = up[0] * zy - up[1] * zx;
     len = Math.hypot(xx, xy, xz);
     xx /= len; xy /= len; xz /= len;
 
@@ -170,10 +149,17 @@ function lookAt(out, eye, center, up) {
     out[0] = xx; out[1] = yx; out[2] = zx; out[3] = 0;
     out[4] = xy; out[5] = yy; out[6] = zy; out[7] = 0;
     out[8] = xz; out[9] = yz; out[10] = zz; out[11] = 0;
-    out[12] = -(xx * ex + xy * ey + xz * ez);
-    out[13] = -(yx * ex + yy * ey + yz * ez);
-    out[14] = -(zx * ex + zy * ey + zz * ez);
+    out[12] = -(xx * eye[0] + xy * eye[1] + xz * eye[2]);
+    out[13] = -(yx * eye[0] + yy * eye[1] + yz * eye[2]);
+    out[14] = -(zx * eye[0] + zy * eye[1] + zz * eye[2]);
     out[15] = 1;
+}
+
+function identity(out) {
+    out[0]=1; out[1]=0; out[2]=0; out[3]=0;
+    out[4]=0; out[5]=1; out[6]=0; out[7]=0;
+    out[8]=0; out[9]=0; out[10]=1; out[11]=0;
+    out[12]=0; out[13]=0; out[14]=0; out[15]=1;
 }
 
 function multiply(out, a, b) {
@@ -186,13 +172,6 @@ function multiply(out, a, b) {
         o[i + 12] = ai0 * b[12] + ai1 * b[13] + ai2 * b[14] + ai3 * b[15];
     }
     out.set(o);
-}
-
-function identity(out) {
-    out[0]=1; out[1]=0; out[2]=0; out[3]=0;
-    out[4]=0; out[5]=1; out[6]=0; out[7]=0;
-    out[8]=0; out[9]=0; out[10]=1; out[11]=0;
-    out[12]=0; out[13]=0; out[14]=0; out[15]=1;
 }
 
 function translate(out, x, y, z) {
@@ -221,24 +200,23 @@ function rotateY(out, rad) {
     out[10] = m2 * s + m10 * c;
 }
 
-// === Taxi state ===
+// --- Taxi state ---
 let taxiX = 0;
 let taxiZ = 0;
-let taxiAngle = 0; // radians
+let taxiAngle = 0;
 
 const keys = {};
 document.addEventListener("keydown", e => keys[e.key] = true);
 document.addEventListener("keyup", e => keys[e.key] = false);
 
-const speed = 0.1;
-const turnSpeed = 0.04;
+const speed = 0.12;
+const turnSpeed = 0.05;
 
-// === Render loop ===
+// --- Render loop ---
 gl.enable(gl.DEPTH_TEST);
-gl.clearColor(0.05, 0.05, 0.08, 1);
+gl.clearColor(0.02, 0.02, 0.05, 1);
 
 function loop() {
-    // Input
     if (keys["ArrowLeft"]) taxiAngle += turnSpeed;
     if (keys["ArrowRight"]) taxiAngle -= turnSpeed;
 
@@ -256,15 +234,6 @@ function loop() {
 
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    // Camera behind and above taxi
-    const eye = [
-        taxiX - dirX * 4,
-        2,
-        taxiZ - dirZ * 4
-    ];
-    const center = [taxiX, 0.5, taxiZ];
-    const up = [0, 1, 0];
-
     const proj = new Float32Array(16);
     const view = new Float32Array(16);
     const model = new Float32Array(16);
@@ -272,18 +241,27 @@ function loop() {
     const mvp = new Float32Array(16);
 
     perspective(proj, Math.PI / 3, canvas.width / canvas.height, 0.1, 100);
+
+    const eye = [taxiX - dirX * 5, 3, taxiZ - dirZ * 5];
+    const center = [taxiX, 0.5, taxiZ];
+    const up = [0, 1, 0];
     lookAt(view, eye, center, up);
 
-    // Draw taxi + ground with same MVP (model only moves taxi)
+    multiply(vp, proj, view);
+
+    // Taxi model
     identity(model);
     translate(model, taxiX, 0.5, taxiZ);
     rotateY(model, taxiAngle);
-
-    multiply(vp, proj, view);
     multiply(mvp, vp, model);
-
     gl.uniformMatrix4fv(uMVP, false, mvp);
-    gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+    gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+
+    // Ground model (identity)
+    identity(model);
+    multiply(mvp, vp, model);
+    gl.uniformMatrix4fv(uMVP, false, mvp);
+    gl.drawElements(gl.TRIANGLES, indices.length - 36, gl.UNSIGNED_SHORT, 36 * 2);
 
     requestAnimationFrame(loop);
 }
