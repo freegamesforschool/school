@@ -2,32 +2,15 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>3D Anime Game</title>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background: #000;
-      font-family: Arial, sans-serif;
-    }
-    #ui {
-      position: fixed;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: white;
-      text-shadow: 0 0 6px black;
-      font-size: 18px;
-      z-index: 10;
-    }
-  </style>
+  <title>3D Anime Game (Simple Base)</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <div id="ui">WASD to move • Space = dash • Click = energy blast</div>
 
-  <script src="three.js"></script>
-  <script src="game.js"></script>
+  <canvas id="game"></canvas>
 
+  <script src="game.js"></script>
 </body>
 </html>
