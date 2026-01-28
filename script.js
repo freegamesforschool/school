@@ -1,76 +1,44 @@
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+const world = document.getElementById("world");
+const taxi = document.getElementById("taxi");
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+let x = 1000;
+let y = 1000;
+let angle = 0;
+
+const speed = 5;
+const turnSpeed = 4;
 
 const keys = {};
 
-// Car object
-const car = {
-    x: canvas.width / 2,
-    y: canvas.height / 2,
-    angle: 0,
-    speed: 0,
-    maxSpeed: 8,
-    accel: 0.2,
-    brake: 0.3,
-    friction: 0.05,
-    turnSpeed: 0.04,
-    driftFactor: 0.92 // lower = more drift
-};
-
-// Input listeners
 document.addEventListener("keydown", e => keys[e.key] = true);
 document.addEventListener("keyup", e => keys[e.key] = false);
 
-// Game loop
-function update() {
-    // Acceleration
-    if (keys["w"]) car.speed += car.accel;
-    if (keys["s"]) car.speed -= car.brake;
+function gameLoop() {
 
-    // Clamp speed
-    car.speed = Math.max(Math.min(car.speed, car.maxSpeed), -car.maxSpeed / 2);
+    // Turning
+    if (keys["ArrowLeft"]) angle -= turnSpeed;
+    if (keys["ArrowRight"]) angle += turnSpeed;
 
-    // Steering (only when moving)
-    if (Math.abs(car.speed) > 0.1) {
-        if (keys["a"]) car.angle -= car.turnSpeed * (car.speed / car.maxSpeed);
-        if (keys["d"]) car.angle += car.turnSpeed * (car.speed / car.maxSpeed);
+    // Forward/backward
+    if (keys["ArrowUp"]) {
+        x += Math.sin(angle * Math.PI / 180) * speed;
+        y -= Math.cos(angle * Math.PI / 180) * speed;
+    }
+    if (keys["ArrowDown"]) {
+        x -= Math.sin(angle * Math.PI / 180) * speed;
+        y += Math.cos(angle * Math.PI / 180) * speed;
     }
 
-    // Apply friction
-    car.speed *= (1 - car.friction);
+    // Move taxi
+    taxi.style.left = x + "px";
+    taxi.style.top = y + "px";
+    taxi.style.transform = `translateZ(20px) rotateZ(${angle}deg)`;
 
-    // Drift physics
-    const vx = Math.cos(car.angle) * car.speed;
-    const vy = Math.sin(car.angle) * car.speed;
+    // Fake follow camera by rotating the world
+    world.style.transform =
+        `translate(-50%, -50%) rotateX(60deg) rotateZ(${-angle}deg) translate(${-x}px, ${-y}px)`;
 
-    car.x += vx;
-    car.y += vy;
-
-    // Wrap screen
-    if (car.x < 0) car.x = canvas.width;
-    if (car.x > canvas.width) car.x = 0;
-    if (car.y < 0) car.y = canvas.height;
-    if (car.y > canvas.height) car.y = 0;
-
-    draw();
-    requestAnimationFrame(update);
+    requestAnimationFrame(gameLoop);
 }
 
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    ctx.save();
-    ctx.translate(car.x, car.y);
-    ctx.rotate(car.angle);
-
-    // Simple placeholder car
-    ctx.fillStyle = "orange";
-    ctx.fillRect(-20, -10, 40, 20);
-
-    ctx.restore();
-}
-
-update();
+gameLoop();
