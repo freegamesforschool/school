@@ -1,187 +1,154 @@
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+let scene, camera, renderer;
+let player, keys = {};
+let velocity = new THREE.Vector3();
+let dashCooldown = 0;
+const projectiles = [];
 
-const ui = document.getElementById("ui");
+init();
+animate();
 
-let money = 0;
-let hookX = canvas.width / 2;
-let hookY = 80;
-let hookWidth = 10;
-let hookHeight = 20;
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x050510);
 
-let lineTop = 80;
-let maxDepth = 600;
+  camera = new THREE.PerspectiveCamera(
+    70,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+  camera.position.set(0, 10, 18);
 
-let state = "aim"; // "aim" | "down" | "up"
-let speedDown = 4;
-let speedUp = 5;
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
 
-let fishes = [];
-let caught = [];
+  // Lights
+  const hemi = new THREE.HemisphereLight(0x8888ff, 0x080808, 1.2);
+  scene.add(hemi);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+  dir.position.set(10, 20, 10);
+  scene.add(dir);
 
-canvas.addEventListener("mousemove", e => {
-  if (state === "aim") {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    hookX = Math.max(40, Math.min(canvas.width - 40, x));
+  // Arena
+  const floorGeo = new THREE.CircleGeometry(30, 64);
+  const floorMat = new THREE.MeshPhongMaterial({
+    color: 0x111122,
+    emissive: 0x111133
+  });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  scene.add(floor);
+
+  // Player (simple capsule)
+  const bodyGeo = new THREE.CapsuleGeometry(0.6, 1.6, 8, 16);
+  const bodyMat = new THREE.MeshPhongMaterial({
+    color: 0xffeeee,
+    emissive: 0x331111
+  });
+  player = new THREE.Mesh(bodyGeo, bodyMat);
+  player.position.set(0, 1.5, 0);
+  scene.add(player);
+
+  // Input
+  window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+  window.addEventListener("keyup",   e => keys[e.key.toLowerCase()] = false);
+
+  window.addEventListener("resize", onResize);
+
+  // Mouse click = cursed blast
+  window.addEventListener("mousedown", shootCursedBlast);
+}
+
+function shootCursedBlast() {
+  const projGeo = new THREE.SphereGeometry(0.3, 16, 16);
+  const projMat = new THREE.MeshPhongMaterial({
+    color: 0x66ccff,
+    emissive: 0x2299ff
+  });
+  const proj = new THREE.Mesh(projGeo, projMat);
+
+  const dir = new THREE.Vector3(0, 0, -1);
+  dir.applyQuaternion(player.quaternion).normalize();
+
+  proj.position.copy(player.position).add(new THREE.Vector3(0, 1, 0)).add(dir.clone().multiplyScalar(1.2));
+  proj.userData = {
+    dir,
+    speed: 18,
+    life: 2.0
+  };
+
+  scene.add(proj);
+  projectiles.push(proj);
+}
+
+function updatePlayer(delta) {
+  const move = new THREE.Vector3();
+  const speed = 8;
+
+  if (keys["w"]) move.z -= 1;
+  if (keys["s"]) move.z += 1;
+  if (keys["a"]) move.x -= 1;
+  if (keys["d"]) move.x += 1;
+
+  if (move.lengthSq() > 0) {
+    move.normalize();
+    // face movement direction
+    const targetAngle = Math.atan2(move.x, move.z);
+    player.rotation.y = targetAngle;
   }
-});
 
-canvas.addEventListener("click", () => {
-  if (state === "aim") {
-    state = "down";
-    caught = [];
-  } else if (state === "up" && hookY <= lineTop + 5) {
-    state = "aim";
+  move.multiplyScalar(speed * delta);
+  player.position.add(move);
+
+  // Dash (space)
+  dashCooldown -= delta;
+  if (keys[" "] && dashCooldown <= 0) {
+    const dashDir = new THREE.Vector3(0, 0, -1);
+    dashDir.applyQuaternion(player.quaternion).normalize();
+    player.position.add(dashDir.multiplyScalar(6));
+    dashCooldown = 1.0;
   }
-});
 
-function spawnFishes() {
-  fishes = [];
-  const rows = 6;
-  for (let i = 0; i < rows; i++) {
-    const depth = 140 + i * 80;
-    const count = 3 + Math.floor(Math.random() * 3);
-    for (let j = 0; j < count; j++) {
-      fishes.push({
-        x: Math.random() * (canvas.width - 80) + 40,
-        y: depth + (Math.random() - 0.5) * 30,
-        r: 12 + Math.random() * 10,
-        value: 5 + i * 5,
-        dir: Math.random() < 0.5 ? -1 : 1,
-        speed: 0.5 + Math.random() * 0.8,
-        alive: true
-      });
+  // keep inside arena
+  const r = Math.sqrt(player.position.x ** 2 + player.position.z ** 2);
+  if (r > 28) {
+    const factor = 28 / r;
+    player.position.x *= factor;
+    player.position.z *= factor;
+  }
+
+  // camera follow
+  const camOffset = new THREE.Vector3(0, 10, 18);
+  const targetCamPos = player.position.clone().add(camOffset);
+  camera.position.lerp(targetCamPos, 0.08);
+  camera.lookAt(player.position.x, player.position.y + 2, player.position.z);
+}
+
+function updateProjectiles(delta) {
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    p.position.add(p.userData.dir.clone().multiplyScalar(p.userData.speed * delta));
+    p.userData.life -= delta;
+    if (p.userData.life <= 0) {
+      scene.remove(p);
+      projectiles.splice(i, 1);
     }
   }
 }
 
-spawnFishes();
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = 0.016;
 
-function update() {
-  if (state === "down") {
-    hookY += speedDown;
-    if (hookY >= maxDepth) {
-      state = "up";
-    }
-  } else if (state === "up") {
-    hookY -= speedUp;
-    if (hookY <= lineTop) {
-      hookY = lineTop;
-      // cash in
-      let gained = 0;
-      for (const f of caught) gained += f.value;
-      money += gained;
-      ui.innerText = "$" + money;
-      // reset fish
-      spawnFishes();
-      state = "aim";
-    }
-  }
+  updatePlayer(delta);
+  updateProjectiles(delta);
 
-  // move fishes
-  for (const f of fishes) {
-    if (!f.alive) continue;
-    f.x += f.dir * f.speed;
-    if (f.x < 30 || f.x > canvas.width - 30) f.dir *= -1;
-  }
-
-  // collisions while going down or up
-  if (state === "down" || state === "up") {
-    const hx = hookX;
-    const hy = hookY + hookHeight / 2;
-    for (const f of fishes) {
-      if (!f.alive) continue;
-      const dx = f.x - hx;
-      const dy = f.y - hy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < f.r + 10) {
-        f.alive = false;
-        caught.push(f);
-        if (caught.length >= 5) {
-          state = "up";
-        }
-      }
-    }
-  }
+  renderer.render(scene, camera);
 }
 
-function drawFish(f) {
-  ctx.save();
-  ctx.translate(f.x, f.y);
-  ctx.scale(f.dir, 1);
-
-  ctx.fillStyle = "#ffcc66";
-  ctx.beginPath();
-  ctx.ellipse(0, 0, f.r * 1.4, f.r, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(-f.r * 1.4, 0);
-  ctx.lineTo(-f.r * 2, -f.r * 0.8);
-  ctx.lineTo(-f.r * 2, f.r * 0.8);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "white";
-  ctx.beginPath();
-  ctx.arc(f.r * 0.6, -f.r * 0.3, f.r * 0.25, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "black";
-  ctx.beginPath();
-  ctx.arc(f.r * 0.7, -f.r * 0.3, f.r * 0.12, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.restore();
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
 }
-
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // water gradient already from CSS, but we can add seabed
-  ctx.fillStyle = "#002244";
-  ctx.fillRect(0, lineTop, canvas.width, canvas.height - lineTop);
-
-  // seabed
-  ctx.fillStyle = "#553311";
-  ctx.fillRect(0, maxDepth + 40, canvas.width, canvas.height - (maxDepth + 40));
-
-  // line
-  ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(hookX, 0);
-  ctx.lineTo(hookX, hookY);
-  ctx.stroke();
-
-  // hook
-  ctx.fillStyle = "#dddddd";
-  ctx.fillRect(hookX - hookWidth / 2, hookY, hookWidth, hookHeight);
-  ctx.beginPath();
-  ctx.arc(hookX, hookY + hookHeight, hookWidth, 0, Math.PI);
-  ctx.stroke();
-
-  // fishes
-  for (const f of fishes) {
-    if (f.alive) drawFish(f);
-  }
-
-  // caught (draw attached above hook)
-  let offset = 0;
-  for (const f of caught) {
-    ctx.save();
-    ctx.translate(hookX, hookY + hookHeight + 10 + offset);
-    drawFish({ ...f, x: 0, y: 0 });
-    ctx.restore();
-    offset += f.r * 2;
-  }
-}
-
-function loop() {
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
-
-loop();
