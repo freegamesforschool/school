@@ -1,154 +1,101 @@
-let scene, camera, renderer;
-let player, keys = {};
-let velocity = new THREE.Vector3();
-let dashCooldown = 0;
-const projectiles = [];
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-init();
-animate();
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-function init() {
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x050510);
+let keys = {};
+let projectiles = [];
 
-  camera = new THREE.PerspectiveCamera(
-    70,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    1000
-  );
-  camera.position.set(0, 10, 18);
+const player = {
+  x: canvas.width / 2,
+  z: 200,
+  speed: 4,
+  dashCooldown: 0
+};
 
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.body.appendChild(renderer.domElement);
+window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-  // Lights
-  const hemi = new THREE.HemisphereLight(0x8888ff, 0x080808, 1.2);
-  scene.add(hemi);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-  dir.position.set(10, 20, 10);
-  scene.add(dir);
+window.addEventListener("mousedown", shoot);
 
-  // Arena
-  const floorGeo = new THREE.CircleGeometry(30, 64);
-  const floorMat = new THREE.MeshPhongMaterial({
-    color: 0x111122,
-    emissive: 0x111133
+function shoot() {
+  projectiles.push({
+    x: player.x,
+    z: player.z - 20,
+    speed: 10
   });
-  const floor = new THREE.Mesh(floorGeo, floorMat);
-  floor.rotation.x = -Math.PI / 2;
-  scene.add(floor);
-
-  // Player (simple capsule)
-  const bodyGeo = new THREE.CapsuleGeometry(0.6, 1.6, 8, 16);
-  const bodyMat = new THREE.MeshPhongMaterial({
-    color: 0xffeeee,
-    emissive: 0x331111
-  });
-  player = new THREE.Mesh(bodyGeo, bodyMat);
-  player.position.set(0, 1.5, 0);
-  scene.add(player);
-
-  // Input
-  window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
-  window.addEventListener("keyup",   e => keys[e.key.toLowerCase()] = false);
-
-  window.addEventListener("resize", onResize);
-
-  // Mouse click = cursed blast
-  window.addEventListener("mousedown", shootCursedBlast);
 }
 
-function shootCursedBlast() {
-  const projGeo = new THREE.SphereGeometry(0.3, 16, 16);
-  const projMat = new THREE.MeshPhongMaterial({
-    color: 0x66ccff,
-    emissive: 0x2299ff
-  });
-  const proj = new THREE.Mesh(projGeo, projMat);
+function update() {
+  let moveX = 0;
+  let moveZ = 0;
 
-  const dir = new THREE.Vector3(0, 0, -1);
-  dir.applyQuaternion(player.quaternion).normalize();
+  if (keys["w"]) moveZ -= 1;
+  if (keys["s"]) moveZ += 1;
+  if (keys["a"]) moveX -= 1;
+  if (keys["d"]) moveX += 1;
 
-  proj.position.copy(player.position).add(new THREE.Vector3(0, 1, 0)).add(dir.clone().multiplyScalar(1.2));
-  proj.userData = {
-    dir,
-    speed: 18,
-    life: 2.0
-  };
+  const len = Math.hypot(moveX, moveZ);
+  if (len > 0) {
+    moveX /= len;
+    moveZ /= len;
+  }
 
-  scene.add(proj);
-  projectiles.push(proj);
+  player.x += moveX * player.speed;
+  player.z += moveZ * player.speed;
+
+  if (keys[" "] && player.dashCooldown <= 0) {
+    player.z -= 80;
+    player.dashCooldown = 40;
+  }
+
+  if (player.dashCooldown > 0) player.dashCooldown--;
+
+  for (let p of projectiles) {
+    p.z -= p.speed;
+  }
+
+  projectiles = projectiles.filter(p => p.z > -200);
 }
 
-function updatePlayer(delta) {
-  const move = new THREE.Vector3();
-  const speed = 8;
-
-  if (keys["w"]) move.z -= 1;
-  if (keys["s"]) move.z += 1;
-  if (keys["a"]) move.x -= 1;
-  if (keys["d"]) move.x += 1;
-
-  if (move.lengthSq() > 0) {
-    move.normalize();
-    // face movement direction
-    const targetAngle = Math.atan2(move.x, move.z);
-    player.rotation.y = targetAngle;
-  }
-
-  move.multiplyScalar(speed * delta);
-  player.position.add(move);
-
-  // Dash (space)
-  dashCooldown -= delta;
-  if (keys[" "] && dashCooldown <= 0) {
-    const dashDir = new THREE.Vector3(0, 0, -1);
-    dashDir.applyQuaternion(player.quaternion).normalize();
-    player.position.add(dashDir.multiplyScalar(6));
-    dashCooldown = 1.0;
-  }
-
-  // keep inside arena
-  const r = Math.sqrt(player.position.x ** 2 + player.position.z ** 2);
-  if (r > 28) {
-    const factor = 28 / r;
-    player.position.x *= factor;
-    player.position.z *= factor;
-  }
-
-  // camera follow
-  const camOffset = new THREE.Vector3(0, 10, 18);
-  const targetCamPos = player.position.clone().add(camOffset);
-  camera.position.lerp(targetCamPos, 0.08);
-  camera.lookAt(player.position.x, player.position.y + 2, player.position.z);
+function drawPlayer() {
+  const size = 40;
+  ctx.fillStyle = "#ffdddd";
+  ctx.fillRect(player.x - size / 2, canvas.height - player.z - size, size, size);
 }
 
-function updateProjectiles(delta) {
-  for (let i = projectiles.length - 1; i >= 0; i--) {
-    const p = projectiles[i];
-    p.position.add(p.userData.dir.clone().multiplyScalar(p.userData.speed * delta));
-    p.userData.life -= delta;
-    if (p.userData.life <= 0) {
-      scene.remove(p);
-      projectiles.splice(i, 1);
-    }
+function drawProjectiles() {
+  ctx.fillStyle = "#66ccff";
+  for (let p of projectiles) {
+    ctx.beginPath();
+    ctx.arc(p.x, canvas.height - p.z, 10, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
-function animate() {
-  requestAnimationFrame(animate);
-  const delta = 0.016;
+function drawArena() {
+  ctx.strokeStyle = "#333";
+  ctx.lineWidth = 2;
 
-  updatePlayer(delta);
-  updateProjectiles(delta);
-
-  renderer.render(scene, camera);
+  for (let i = 0; i < 10; i++) {
+    const z = i * 80;
+    ctx.beginPath();
+    ctx.moveTo(0, canvas.height - z);
+    ctx.lineTo(canvas.width, canvas.height - z);
+    ctx.stroke();
+  }
 }
 
-function onResize() {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+function loop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  update();
+  drawArena();
+  drawPlayer();
+  drawProjectiles();
+
+  requestAnimationFrame(loop);
 }
+
+loop();
