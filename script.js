@@ -1,269 +1,206 @@
 const canvas = document.getElementById("glcanvas");
 const gl = canvas.getContext("webgl");
 
-if (!gl) {
-    alert("WebGL not supported");
-}
-
 function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     gl.viewport(0, 0, canvas.width, canvas.height);
 }
-window.addEventListener("resize", resize);
 resize();
+window.onresize = resize;
 
-// --- Shaders ---
-const vsSource = `
-attribute vec3 aPosition;
+// --- SHADERS ---
+const vs = `
+attribute vec3 aPos;
 attribute vec3 aColor;
 uniform mat4 uMVP;
 varying vec3 vColor;
-void main(void) {
-    gl_Position = uMVP * vec4(aPosition, 1.0);
+void main() {
+    gl_Position = uMVP * vec4(aPos, 1.0);
     vColor = aColor;
-}
-`;
-
-const fsSource = `
+}`;
+const fs = `
 precision mediump float;
 varying vec3 vColor;
-void main(void) {
+void main() {
     gl_FragColor = vec4(vColor, 1.0);
-}
-`;
+}`;
 
-function compileShader(type, source) {
+function compile(type, src) {
     const s = gl.createShader(type);
-    gl.shaderSource(s, source);
+    gl.shaderSource(s, src);
     gl.compileShader(s);
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-        console.error(gl.getShaderInfoLog(s));
-    }
     return s;
 }
 
-const vs = compileShader(gl.VERTEX_SHADER, vsSource);
-const fs = compileShader(gl.FRAGMENT_SHADER, fsSource);
-
 const program = gl.createProgram();
-gl.attachShader(program, vs);
-gl.attachShader(program, fs);
+gl.attachShader(program, compile(gl.VERTEX_SHADER, vs));
+gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fs));
 gl.linkProgram(program);
-if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.error(gl.getProgramInfoLog(program));
-}
 gl.useProgram(program);
 
-// --- Geometry ---
-// Taxi cube
-const t = 0.5;
-const cubeVertices = [
-    // x, y, z,      r, g, b
-    // Front
-    -t, -t,  t,   1, 1, 0,
-     t, -t,  t,   1, 1, 0,
-     t,  t,  t,   1, 1, 0,
-    -t,  t,  t,   1, 1, 0,
-    // Back
-    -t, -t, -t,   1, 1, 0,
-     t, -t, -t,   1, 1, 0,
-     t,  t, -t,   1, 1, 0,
-    -t,  t, -t,   1, 1, 0,
-];
-
-// Ground plane
-const g = 20;
-const groundVertices = [
-    -g, 0, -g,   0.1, 0.6, 0.1,
-     g, 0, -g,   0.1, 0.6, 0.1,
-     g, 0,  g,   0.1, 0.6, 0.1,
-    -g, 0,  g,   0.1, 0.6, 0.1,
-];
-
-const vertices = new Float32Array([
-    ...cubeVertices,
-    ...groundVertices
-]);
-
-const indices = new Uint16Array([
-    // Cube (0–7)
-    0,1,2,  0,2,3,
-    4,5,6,  4,6,7,
-    3,2,6,  3,6,7,
-    0,1,5,  0,5,4,
-    0,3,7,  0,7,4,
-    1,2,6,  1,6,5,
-    // Ground (8–11)
-    8,9,10,
-    8,10,11
-]);
-
-const vbo = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-
-const ibo = gl.createBuffer();
-gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
-
-const stride = 6 * 4;
-const aPosition = gl.getAttribLocation(program, "aPosition");
-const aColor = gl.getAttribLocation(program, "aColor");
-
-gl.enableVertexAttribArray(aPosition);
-gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, stride, 0);
-
-gl.enableVertexAttribArray(aColor);
-gl.vertexAttribPointer(aColor, 3, gl.FLOAT, false, stride, 3 * 4);
-
-const uMVP = gl.getUniformLocation(program, "uMVP");
-
-// --- Matrix helpers ---
-function perspective(out, fovy, aspect, near, far) {
-    const f = 1.0 / Math.tan(fovy / 2);
-    const nf = 1 / (near - far);
-    out[0] = f / aspect; out[1] = 0; out[2] = 0; out[3] = 0;
-    out[4] = 0; out[5] = f; out[6] = 0; out[7] = 0;
-    out[8] = 0; out[9] = 0; out[10] = (far + near) * nf; out[11] = -1;
-    out[12] = 0; out[13] = 0; out[14] = (2 * far * near) * nf; out[15] = 0;
+// --- BASIC CUBE GEOMETRY ---
+function cube(size, r, g, b) {
+    const s = size;
+    const v = [
+        // front
+        -s, -s,  s, r,g,b,
+         s, -s,  s, r,g,b,
+         s,  s,  s, r,g,b,
+        -s,  s,  s, r,g,b,
+        // back
+        -s, -s, -s, r,g,b,
+         s, -s, -s, r,g,b,
+         s,  s, -s, r,g,b,
+        -s,  s, -s, r,g,b,
+    ];
+    const i = [
+        0,1,2, 0,2,3,
+        4,5,6, 4,6,7,
+        3,2,6, 3,6,7,
+        0,1,5, 0,5,4,
+        0,3,7, 0,7,4,
+        1,2,6, 1,6,5
+    ];
+    return {v:new Float32Array(v), i:new Uint16Array(i)};
 }
 
-function lookAt(out, eye, center, up) {
-    let zx = eye[0] - center[0];
-    let zy = eye[1] - center[1];
-    let zz = eye[2] - center[2];
-    let len = Math.hypot(zx, zy, zz);
-    zx /= len; zy /= len; zz /= len;
+const taxi = cube(0.5, 1,1,0);
+const building = cube(1, 0.2,0.6,1);
+const ground = cube(20, 0.1,0.5,0.1);
 
-    let xx = up[1] * zz - up[2] * zy;
-    let xy = up[2] * zx - up[0] * zz;
-    let xz = up[0] * zy - up[1] * zx;
-    len = Math.hypot(xx, xy, xz);
-    xx /= len; xy /= len; xz /= len;
+// --- BUFFER SETUP ---
+function makeBuffer(obj) {
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
 
-    let yx = zy * xz - zz * xx;
-    let yy = zz * xx - zx * xz;
-    let yz = zx * xy - zy * xx;
+    const vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, obj.v, gl.STATIC_DRAW);
 
-    out[0] = xx; out[1] = yx; out[2] = zx; out[3] = 0;
-    out[4] = xy; out[5] = yy; out[6] = zy; out[7] = 0;
-    out[8] = xz; out[9] = yz; out[10] = zz; out[11] = 0;
-    out[12] = -(xx * eye[0] + xy * eye[1] + xz * eye[2]);
-    out[13] = -(yx * eye[0] + yy * eye[1] + yz * eye[2]);
-    out[14] = -(zx * eye[0] + zy * eye[1] + zz * eye[2]);
-    out[15] = 1;
+    const aPos = gl.getAttribLocation(program, "aPos");
+    const aColor = gl.getAttribLocation(program, "aColor");
+
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 24, 0);
+
+    gl.enableVertexAttribArray(aColor);
+    gl.vertexAttribPointer(aColor, 3, gl.FLOAT, false, 24, 12);
+
+    const ibo = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, obj.i, gl.STATIC_DRAW);
+
+    return {vao, count: obj.i.length};
 }
 
-function identity(out) {
-    out[0]=1; out[1]=0; out[2]=0; out[3]=0;
-    out[4]=0; out[5]=1; out[6]=0; out[7]=0;
-    out[8]=0; out[9]=0; out[10]=1; out[11]=0;
-    out[12]=0; out[13]=0; out[14]=0; out[15]=1;
-}
+const taxiMesh = makeBuffer(taxi);
+const groundMesh = makeBuffer(ground);
+const buildingMesh = makeBuffer(building);
 
+// --- MATRIX MATH ---
+function mat4() { return new Float32Array(16).fill(0); }
+function identity(m) {
+    m[0]=m[5]=m[10]=m[15]=1;
+}
+function perspective(m, fov, aspect, near, far) {
+    const f = 1/Math.tan(fov/2);
+    m[0]=f/aspect; m[5]=f;
+    m[10]=(far+near)/(near-far);
+    m[11]=-1;
+    m[14]=(2*far*near)/(near-far);
+}
 function multiply(out, a, b) {
     const o = new Float32Array(16);
-    for (let i = 0; i < 4; i++) {
-        const ai0 = a[i], ai1 = a[i + 4], ai2 = a[i + 8], ai3 = a[i + 12];
-        o[i]      = ai0 * b[0] + ai1 * b[1] + ai2 * b[2] + ai3 * b[3];
-        o[i + 4]  = ai0 * b[4] + ai1 * b[5] + ai2 * b[6] + ai3 * b[7];
-        o[i + 8]  = ai0 * b[8] + ai1 * b[9] + ai2 * b[10] + ai3 * b[11];
-        o[i + 12] = ai0 * b[12] + ai1 * b[13] + ai2 * b[14] + ai3 * b[15];
-    }
+    for (let r=0;r<4;r++)
+        for (let c=0;c<4;c++)
+            o[r*4+c] =
+                a[r*4+0]*b[0*4+c] +
+                a[r*4+1]*b[1*4+c] +
+                a[r*4+2]*b[2*4+c] +
+                a[r*4+3]*b[3*4+c];
     out.set(o);
 }
-
-function translate(out, x, y, z) {
-    out[12] += x;
-    out[13] += y;
-    out[14] += z;
+function translate(m, x,y,z) {
+    m[12]+=x; m[13]+=y; m[14]+=z;
+}
+function rotateY(m, a) {
+    const c=Math.cos(a), s=Math.sin(a);
+    const m0=m[0], m2=m[2], m8=m[8], m10=m[10];
+    m[0]=m0*c+m2*s;
+    m[2]=m2*c-m0*s;
+    m[8]=m8*c+m10*s;
+    m[10]=m10*c-m8*s;
 }
 
-function rotateY(out, rad) {
-    const c = Math.cos(rad);
-    const s = Math.sin(rad);
-    const m0 = out[0], m4 = out[4], m8 = out[8];
-    const m1 = out[1], m5 = out[5], m9 = out[9];
-    const m2 = out[2], m6 = out[6], m10 = out[10];
+// --- GAME STATE ---
+let tx=0, tz=0, tAngle=0;
+const keys={};
+document.onkeydown=e=>keys[e.key]=true;
+document.onkeyup=e=>keys[e.key]=false;
 
-    out[0] = m0 * c + m8 * -s;
-    out[4] = m4 * c + m8 * -s;
-    out[8] = m0 * s + m8 * c;
-
-    out[1] = m1 * c + m9 * -s;
-    out[5] = m5 * c + m9 * -s;
-    out[9] = m1 * s + m9 * c;
-
-    out[2] = m2 * c + m10 * -s;
-    out[6] = m6 * c + m10 * -s;
-    out[10] = m2 * s + m10 * c;
-}
-
-// --- Taxi state ---
-let taxiX = 0;
-let taxiZ = 0;
-let taxiAngle = 0;
-
-const keys = {};
-document.addEventListener("keydown", e => keys[e.key] = true);
-document.addEventListener("keyup", e => keys[e.key] = false);
-
-const speed = 0.12;
-const turnSpeed = 0.05;
-
-// --- Render loop ---
+// --- RENDER LOOP ---
+const uMVP = gl.getUniformLocation(program, "uMVP");
 gl.enable(gl.DEPTH_TEST);
-gl.clearColor(0.02, 0.02, 0.05, 1);
+
+function drawMesh(mesh, mvp) {
+    gl.uniformMatrix4fv(uMVP, false, mvp);
+    gl.bindVertexArray(mesh.vao);
+    gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_SHORT, 0);
+}
 
 function loop() {
-    if (keys["ArrowLeft"]) taxiAngle += turnSpeed;
-    if (keys["ArrowRight"]) taxiAngle -= turnSpeed;
+    // movement
+    if (keys["ArrowLeft"]) tAngle += 0.05;
+    if (keys["ArrowRight"]) tAngle -= 0.05;
 
-    const dirX = Math.sin(taxiAngle);
-    const dirZ = Math.cos(taxiAngle);
+    const dx = Math.sin(tAngle);
+    const dz = Math.cos(tAngle);
 
-    if (keys["ArrowUp"]) {
-        taxiX += dirX * speed;
-        taxiZ += dirZ * speed;
-    }
-    if (keys["ArrowDown"]) {
-        taxiX -= dirX * speed;
-        taxiZ -= dirZ * speed;
-    }
+    if (keys["ArrowUp"]) { tx+=dx*0.1; tz+=dz*0.1; }
+    if (keys["ArrowDown"]) { tx-=dx*0.1; tz-=dz*0.1; }
 
+    gl.clearColor(0.05,0.05,0.1,1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    const proj = new Float32Array(16);
-    const view = new Float32Array(16);
-    const model = new Float32Array(16);
-    const vp = new Float32Array(16);
-    const mvp = new Float32Array(16);
+    // camera
+    const proj = mat4();
+    perspective(proj, Math.PI/3, canvas.width/canvas.height, 0.1, 100);
 
-    perspective(proj, Math.PI / 3, canvas.width / canvas.height, 0.1, 100);
+    const view = mat4(); identity(view);
+    translate(view, -tx + dx*5, -3, -tz + dz*5);
+    rotateY(view, -tAngle);
 
-    const eye = [taxiX - dirX * 5, 3, taxiZ - dirZ * 5];
-    const center = [taxiX, 0.5, taxiZ];
-    const up = [0, 1, 0];
-    lookAt(view, eye, center, up);
-
+    const vp = mat4();
     multiply(vp, proj, view);
 
-    // Taxi model
-    identity(model);
-    translate(model, taxiX, 0.5, taxiZ);
-    rotateY(model, taxiAngle);
-    multiply(mvp, vp, model);
-    gl.uniformMatrix4fv(uMVP, false, mvp);
-    gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+    // draw ground
+    let model = mat4(); identity(model);
+    let mvp = mat4(); multiply(mvp, vp, model);
+    drawMesh(groundMesh, mvp);
 
-    // Ground model (identity)
-    identity(model);
+    // draw taxi
+    model = mat4(); identity(model);
+    translate(model, tx, 0.5, tz);
+    rotateY(model, tAngle);
     multiply(mvp, vp, model);
-    gl.uniformMatrix4fv(uMVP, false, mvp);
-    gl.drawElements(gl.TRIANGLES, indices.length - 36, gl.UNSIGNED_SHORT, 36 * 2);
+    drawMesh(taxiMesh, mvp);
+
+    // draw buildings
+    const buildingPositions = [
+        [-5,0,-5],
+        [ 6,0,-3],
+        [-4,0, 7],
+        [ 8,0, 5]
+    ];
+
+    for (const [bx,by,bz] of buildingPositions) {
+        model = mat4(); identity(model);
+        translate(model, bx, 1, bz);
+        multiply(mvp, vp, model);
+        drawMesh(buildingMesh, mvp);
+    }
 
     requestAnimationFrame(loop);
 }
-
 loop();
