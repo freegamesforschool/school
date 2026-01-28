@@ -2,23 +2,35 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>3D JJK-Inspired Game</title>
+  <title>3D Anime Game</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #000; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: Arial, sans-serif;
+    }
     #ui {
       position: fixed;
       top: 10px;
       left: 50%;
       transform: translateX(-50%);
       color: white;
-      font-family: Arial, sans-serif;
       text-shadow: 0 0 6px black;
+      font-size: 18px;
+      z-index: 10;
     }
   </style>
 </head>
 <body>
-  <div id="ui">WASD to move • Space = dash • Left click = cursed blast</div>
-  <script src="three.min.js"></script>
+
+  <div id="ui">WASD to move • Space = dash • Click = energy blast</div>
+
+  <!-- Load Three.js (your local file) -->
+  <script src="three.js"></script>
+
+  <!-- Load your game code -->
   <script src="game.js"></script>
+
 </body>
 </html>
