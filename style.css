@@ -1,13 +1,31 @@
-html, body {
+body {
     margin: 0;
-    padding: 0;
     overflow: hidden;
-    background: #111;
+    background: #222;
 }
 
-#gameCanvas {
-    display: block;
-    width: 100vw;
-    height: 100vh;
-    background: #222;
+/* 3D world container */
+#world {
+    width: 2000px;
+    height: 2000px;
+    background: #444;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform-style: preserve-3d;
+    transform: translate(-50%, -50%);
+    perspective: 800px;
+}
+
+/* Taxi box */
+#taxi {
+    width: 60px;
+    height: 30px;
+    background: yellow;
+    position: absolute;
+    top: 1000px;
+    left: 1000px;
+    transform-style: preserve-3d;
+    transform: translateZ(20px);
+    border: 3px solid black;
 }
