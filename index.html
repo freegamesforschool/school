@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Tiny Fishing Clone</title>
+  <style>
+    body {
+      margin: 0;
+      background: #001933;
+      overflow: hidden;
+    }
+    #gameCanvas {
+      display: block;
+      margin: 0 auto;
+      background: linear-gradient(#004477, #001933);
+    }
+    #ui {
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: white;
+      font-family: Arial, sans-serif;
+      font-size: 20px;
+      text-shadow: 0 0 4px black;
+    }
+    #hint {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #ffeb99;
+      font-family: Arial, sans-serif;
+      font-size: 16px;
+      text-shadow: 0 0 4px black;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">$0</div>
+  <div id="hint">Click to drop the hook, move mouse to aim</div>
+  <canvas id="gameCanvas" width="480" height="720"></canvas>
+  <script src="game.js"></script>
+</body>
+</html>
